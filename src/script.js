@@ -2,6 +2,7 @@ import './style.css'
 import * as THREE from 'three'
 // import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import Stats from 'three/examples/jsm/libs/stats.module'
+import * as CANNON from 'cannon-es'
 
 export default class ThreeJsDraft {  
   constructor () {
@@ -15,6 +16,9 @@ export default class ThreeJsDraft {
 
     this.xSpeed = 0.1;
     this.zSpeed = 0.1;
+
+    this.threeblocks = [];
+    this.physicsblocks = [];
 
     this.input = {
       up: false,
@@ -88,6 +92,11 @@ export default class ThreeJsDraft {
      */
     this.loadAssets()
 
+
+    this.world = new CANNON.World({
+      gravity: new CANNON.Vec3(0, -1, 0), // m/s²
+    })
+
     /**
      * Objects
      */
@@ -100,6 +109,8 @@ export default class ThreeJsDraft {
     this.animate()
 
     this.addControls();
+
+    
   }
 
   loadAssets () {
@@ -113,12 +124,35 @@ export default class ThreeJsDraft {
     this.floor = new THREE.Mesh( geometry, material );
     this.scene.add( this.floor );
 
+    // Create a static plane for the ground
+    const groundMaterial = new CANNON.Material('ground')
+    const groundBody = new CANNON.Body({
+      type: CANNON.Body.STATIC, // can also be achieved by setting the mass to 0
+      shape: new CANNON.Plane(),
+      material: groundMaterial
+    })
+    groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0) // make it face up
+    this.world.addBody(groundBody)
+
     //Add bunny
+    const slipperyMaterial = new CANNON.Material('slippery')
     var geometry = new THREE.BoxGeometry( 1, 1, 1 );
     var material = new THREE.MeshBasicMaterial( { color: 0xff99ff } );
     this.bunny = new THREE.Mesh( geometry, material );
-    this.bunny.position.y = 0.5;
+    this.bunny.position.y = 2;
     this.scene.add( this.bunny );
+
+    this.bunnyBody = new CANNON.Body({
+      mass: 1, // kg
+      shape: new CANNON.Box(new CANNON.Vec3(0.5,0.5,0.5)),
+      material: slipperyMaterial
+    })
+    this.bunnyBody.position.set(this.bunny.position.x, this.bunny.position.y, this.bunny.position.z)
+    this.bunnyBody.linearDamping = 0
+    this.bunnyBody.angularDamping = 0
+    //this.bunnyBody.friction = 0
+    this.world.addBody(this.bunnyBody);
+    //this.physicsblocks.push(this.bunnyBody);
 
     //Add solid objects
     for (let index = 0; index < 10; index++) {
@@ -127,8 +161,30 @@ export default class ThreeJsDraft {
       var block = new THREE.Mesh( geometry, material );
       block.position.x = Math.random() * 50;
       block.position.z = -Math.random() * 50;
+      block.position.y = 2;
       this.scene.add( block ); 
+      this.threeblocks.push(block);
+
+      var boxBody = new CANNON.Body({
+        mass: 100000, // kg
+        shape: new CANNON.Box(new CANNON.Vec3(0.5,0.5,0.5)),
+      })
+      boxBody.position.set(block.position.x, 2, block.position.z)
+      this.world.addBody(boxBody);
+      this.physicsblocks.push(boxBody);
+
     }
+
+    const slippery_ground = new CANNON.ContactMaterial(groundMaterial, slipperyMaterial, {
+      friction: 0,
+      restitution: 0.3,
+      contactEquationStiffness: 1e8,
+      contactEquationRelaxation: 3,
+    })
+
+    // We must add the contact materials to the world
+    this.world.addContactMaterial(slippery_ground)
+    
   }
 
 
@@ -166,9 +222,9 @@ export default class ThreeJsDraft {
 
 
   animate () {
-    this.bunny.position.z -= this.input.up * this.zSpeed + this.input.down * -this.zSpeed;
-    this.bunny.position.x += this.input.right * this.xSpeed + this.input.left * -this.xSpeed;
-    this.bunny.position.y = 2;
+    this.bunnyBody.velocity.z -= this.input.up * this.zSpeed + this.input.down * -this.zSpeed;
+    this.bunnyBody.velocity.x += this.input.right * this.xSpeed + this.input.left * -this.xSpeed;
+    
 
       // Update the camera position to follow the player
     this.camera.position.x = this.bunny.position.x;
@@ -177,9 +233,19 @@ export default class ThreeJsDraft {
 
     // Look at the player
     this.camera.lookAt(this.bunny.position);
+
+    //Update Physics
+    this.bunny.position.copy(this.bunnyBody.position);
+    this.bunny.quaternion.copy(this.bunnyBody.quaternion)
+
+    for (let i = 0; i < this.threeblocks.length; i++) {
+      this.threeblocks[i].position.copy(this.physicsblocks[i].position);
+      this.threeblocks[i].quaternion.copy(this.physicsblocks[i].quaternion)
+    }
     
     this.renderer.render(this.scene, this.camera)
     window.requestAnimationFrame(this.animate.bind(this))
+    this.world.fixedStep()
   }
 }
 
