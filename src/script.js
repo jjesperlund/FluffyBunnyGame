@@ -17,6 +17,8 @@ export default class ThreeJsDraft {
     this.xSpeed = 0.1;
     this.zSpeed = 0.1;
 
+    this.canJump = true;
+
     this.threeblocks = [];
     this.physicsblocks = [];
 
@@ -25,6 +27,7 @@ export default class ThreeJsDraft {
       down: false,
       left: false,
       right: false,
+      space: false
     }
 
     /**
@@ -149,7 +152,7 @@ export default class ThreeJsDraft {
     })
     this.bunnyBody.position.set(this.bunny.position.x, this.bunny.position.y, this.bunny.position.z)
     this.bunnyBody.linearDamping = 0
-    this.bunnyBody.angularDamping = 0
+    this.bunnyBody.angularDamping = 1
     //this.bunnyBody.friction = 0
     this.world.addBody(this.bunnyBody);
     //this.physicsblocks.push(this.bunnyBody);
@@ -168,6 +171,7 @@ export default class ThreeJsDraft {
       var boxBody = new CANNON.Body({
         mass: 100000, // kg
         shape: new CANNON.Box(new CANNON.Vec3(0.5,0.5,0.5)),
+        material: groundMaterial
       })
       boxBody.position.set(block.position.x, 2, block.position.z)
       this.world.addBody(boxBody);
@@ -185,6 +189,29 @@ export default class ThreeJsDraft {
     // We must add the contact materials to the world
     this.world.addContactMaterial(slippery_ground)
     
+
+
+    //MONEY
+    const boxShape = new CANNON.Box(new CANNON.Vec3(1, 1, 2.5))
+    this.triggerBody = new CANNON.Body({ isTrigger: true })
+    this.triggerBody.addShape(boxShape)
+    this.triggerBody.position.set(5, 0, 0)
+    this.world.addBody(this.triggerBody)
+
+    var geometry = new THREE.BoxGeometry( 2, 2, 5 );
+    var material = new THREE.MeshBasicMaterial( { color: 0xffbf00 } );
+    this.money = new THREE.Mesh( geometry, material );
+    this.money.name = "money"
+    this.money.position.x = 5
+    this.money.position.y = 0
+    this.money.position.z = 0
+    this.scene.add(this.money);
+
+    this.triggerBody.addEventListener('collide', (event) => {
+      if (event.body === this.bunnyBody) {
+        this.remove = true;
+      }
+    })
   }
 
 
@@ -204,6 +231,14 @@ export default class ThreeJsDraft {
       this.input.left = true;
     } if (e.key == "ArrowRight") {
       this.input.right = true;
+    } if (e.key == " ")
+    {
+      if (this.canJump)
+      {
+        this.input.space = true;
+        this.canJump = false;
+      }
+      
     }
   }
   
@@ -216,6 +251,9 @@ export default class ThreeJsDraft {
       this.input.left = false;
     } if (e.key == "ArrowRight") {
       this.input.right = false;
+    }if (e.key == " ")
+    {
+      this.canJump = true;
     }
   }
   
@@ -224,6 +262,12 @@ export default class ThreeJsDraft {
   animate () {
     this.bunnyBody.velocity.z -= this.input.up * this.zSpeed + this.input.down * -this.zSpeed;
     this.bunnyBody.velocity.x += this.input.right * this.xSpeed + this.input.left * -this.xSpeed;
+
+    if(this.input.space)
+    {
+      this.bunnyBody.velocity.y += 2;
+      this.input.space = false;
+    }
     
 
       // Update the camera position to follow the player
@@ -241,6 +285,13 @@ export default class ThreeJsDraft {
     for (let i = 0; i < this.threeblocks.length; i++) {
       this.threeblocks[i].position.copy(this.physicsblocks[i].position);
       this.threeblocks[i].quaternion.copy(this.physicsblocks[i].quaternion)
+    }
+
+    if (this.remove)
+    {
+      this.world.removeBody(this.triggerBody);
+      this.scene.remove(this.money);
+      this.remove = false;
     }
     
     this.renderer.render(this.scene, this.camera)
