@@ -1,3 +1,6 @@
 # Fluffy Bunny Chase
 
-### Crowd Collective Learning Day
+## Getting Started
+1. npm install
+2. npm run dev (to launch local server)
+3. Browser window opens automatically
